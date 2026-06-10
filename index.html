@@ -201,8 +201,14 @@
   .next-step-item:last-child { margin-bottom: 0; }
   .next-step-num { width: 20px; height: 20px; background: var(--blue); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; flex-shrink: 0; margin-top: 1px; }
 
+  /* FINDER HEADER */
+  .finder-header { margin-bottom: 24px; padding-top: 8px; display: flex; justify-content: space-between; align-items: center; gap: 24px; }
+  .search-wrap { position: relative; flex-shrink: 0; width: 280px; }
+
   /* RESPONSIVE */
   @media (max-width: 768px) {
+    .finder-header { flex-direction: column; align-items: stretch; gap: 12px; }
+    .search-wrap { width: 100%; }
     .finder-layout { grid-template-columns: 1fr; }
     .filter-sidebar { position: static; }
     .detail-grid { grid-template-columns: 1fr; }
@@ -224,9 +230,19 @@
 
 <!-- ─── SCREEN: FINDER ────────────────────────────────────────────────── -->
 <div class="screen active" id="screen-finder">
-  <div style="margin-bottom: 24px; padding-top: 8px;">
-    <h1 style="font-size: 26px; font-weight: 800; color: var(--navy); margin-bottom: 4px;">Find Your Course</h1>
-    <p style="font-size: 14px; color: var(--gray-600);">110 courses across 11 top university campuses — Summer 2027</p>
+  <div class="finder-header">
+    <div>
+      <h1 style="font-size: 26px; font-weight: 800; color: var(--navy); margin-bottom: 4px;">Find Your Course</h1>
+      <p style="font-size: 14px; color: var(--gray-600);">110 courses across 11 top university campuses — Summer 2027</p>
+    </div>
+    <div class="search-wrap">
+      <svg style="position:absolute;left:12px;top:50%;transform:translateY(-50%);pointer-events:none;" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="#9CA3AF" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+      <input id="courseSearch" type="text" placeholder="Search courses…"
+        oninput="searchCourses(this.value)"
+        style="width:100%;padding:10px 36px 10px 36px;border:1.5px solid var(--gray-200);border-radius:var(--radius);font-size:14px;color:var(--gray-800);background:white;outline:none;transition:border-color 0.15s;"
+        onfocus="this.style.borderColor='var(--blue)'" onblur="this.style.borderColor='var(--gray-200)'">
+      <button id="searchClear" onclick="clearSearch()" style="display:none;position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--gray-400);font-size:18px;line-height:1;">×</button>
+    </div>
   </div>
 
   <div class="finder-layout">
@@ -267,6 +283,39 @@
       </div>
       <div class="filter-group-body" id="groupFOS">
         <div class="pills" id="pillsFOS"></div>
+      </div>
+
+      <hr class="filter-divider">
+
+      <!-- Course Level (L8) -->
+      <div class="filter-group-header" onclick="toggleFilterGroup('groupLevel', 'labelLevel', 'chevronLevel')">
+        <span class="filter-group-label" id="labelLevel">Course Level</span>
+        <span class="filter-chevron" id="chevronLevel" style="transform:rotate(-90deg)">▼</span>
+      </div>
+      <div class="filter-group-body collapsed" id="groupLevel">
+        <div class="pills" id="pillsLevel"></div>
+      </div>
+
+      <hr class="filter-divider">
+
+      <!-- Course Length -->
+      <div class="filter-group-header" onclick="toggleFilterGroup('groupLength', 'labelLength', 'chevronLength')">
+        <span class="filter-group-label" id="labelLength">Program Length</span>
+        <span class="filter-chevron" id="chevronLength" style="transform:rotate(-90deg)">▼</span>
+      </div>
+      <div class="filter-group-body collapsed" id="groupLength">
+        <div class="pills" id="pillsLength"></div>
+      </div>
+
+      <hr class="filter-divider">
+
+      <!-- Accommodation -->
+      <div class="filter-group-header" onclick="toggleFilterGroup('groupAccom', 'labelAccom', 'chevronAccom')">
+        <span class="filter-group-label" id="labelAccom">Accommodation</span>
+        <span class="filter-chevron" id="chevronAccom" style="transform:rotate(-90deg)">▼</span>
+      </div>
+      <div class="filter-group-body collapsed" id="groupAccom">
+        <div class="pills" id="pillsAccom"></div>
       </div>
     </div>
 
@@ -691,7 +740,7 @@ function fmtPrice(n) {
 let selectedCourse = null;
 let selectedSession = 'AM';
 
-const activeFilters = { campus: [], age: null, track: null };
+const activeFilters = { campus: [], age: null, track: null, level: null, length: null, accom: null };
 const PILL_LIMIT = 5;
 
 const AGE_LABELS = {
@@ -848,8 +897,36 @@ function selectSession(val) {
   document.getElementById('sessionPM').classList.toggle('selected', val === 'PM');
 }
 
+// ─── ENRICH COURSES WITH L8–L15 DERIVED FIELDS ──────────────────────────────
+function enrichCourses() {
+  const DAY_ONLY = new Set(['University of Pennsylvania Carey Law School','Culinary Institute of America']);
+  COURSES.forEach(c => {
+    // L8: Course Level — derived from age group + selective status
+    if (['6–9','9–11'].includes(c.ageGroup)) {
+      c.level = 'Standard';
+    } else if (c.ageGroup === '11–14') {
+      c.level = ['Pre-Medicine','Law & Government','Technology'].includes(c.track) ? 'Intermediate' : 'Standard';
+    } else {
+      // 14–18 / 15–17
+      if (isSelective(c) || ['Pre-Medicine','Law & Government'].includes(c.track)) c.level = 'Advanced';
+      else if (['Technology','Engineering','STEM'].includes(c.track)) c.level = 'Intermediate';
+      else c.level = 'Standard';
+    }
+    // Program Length — derived from durationDays
+    if (!c.durationDays)       c.programLength = 'Standard (3 wks)';
+    else if (c.durationDays <= 6)  c.programLength = 'Short (1 wk)';
+    else if (c.durationDays <= 13) c.programLength = 'Short (2 wks)';
+    else if (c.durationDays <= 20) c.programLength = 'Standard (3 wks)';
+    else                           c.programLength = 'Extended (4 wks)';
+    // Accommodation
+    c.accom = DAY_ONLY.has(c.campus) ? 'Day Student' : 'Residential & Day';
+  });
+}
+
 // ─── INIT FILTERS ────────────────────────────────────────────────────────────
 function init() {
+  enrichCourses();
+
   const campuses = [...new Set(COURSES.map(c => c.campus))].sort();
   renderPills('pillsCampus', campuses, 'campus');
 
@@ -858,6 +935,10 @@ function init() {
 
   const tracks = [...new Set(COURSES.map(c => c.track))].sort();
   renderPills('pillsFOS', tracks, 'track');
+
+  renderPills('pillsLevel',  ['Standard','Intermediate','Advanced'], 'level');
+  renderPills('pillsLength', [...new Set(COURSES.map(c => c.programLength))].sort(), 'length');
+  renderPills('pillsAccom',  ['Residential & Day','Day Student'], 'accom');
 
   renderCourses(COURSES);
   renderNav('finder');
@@ -910,11 +991,17 @@ function renderFilterBar() {
   const chips = document.getElementById('filterChips');
   const campusChips = activeFilters.campus.map(val =>
     `<span class="filter-chip">${val}<button onclick="clearCampus('${val.replace(/'/g,"\\'")}')">×</button></span>`);
-  const ageChip   = activeFilters.age
+  const ageChip    = activeFilters.age
     ? `<span class="filter-chip">${AGE_SHORT[activeFilters.age]||activeFilters.age}<button onclick="clearFilter('age')">×</button></span>` : '';
-  const trackChip = activeFilters.track
+  const trackChip  = activeFilters.track
     ? `<span class="filter-chip">${activeFilters.track}<button onclick="clearFilter('track')">×</button></span>` : '';
-  const all = [...campusChips, ageChip, trackChip].join('');
+  const levelChip  = activeFilters.level
+    ? `<span class="filter-chip">${activeFilters.level}<button onclick="clearFilter('level')">×</button></span>` : '';
+  const lengthChip = activeFilters.length
+    ? `<span class="filter-chip">${activeFilters.length}<button onclick="clearFilter('length')">×</button></span>` : '';
+  const accomChip  = activeFilters.accom
+    ? `<span class="filter-chip">${activeFilters.accom}<button onclick="clearFilter('accom')">×</button></span>` : '';
+  const all = [...campusChips, ageChip, trackChip, levelChip, lengthChip, accomChip].join('');
   if (!all) { bar.classList.remove('visible'); return; }
   bar.classList.add('visible');
   chips.innerHTML = all;
@@ -934,16 +1021,48 @@ function clearFilter(key) {
   filterCourses(); renderFilterBar(); refreshGroupLabels();
 }
 
+let searchQuery = '';
+
+function searchCourses(val) {
+  searchQuery = val.trim().toLowerCase();
+  document.getElementById('searchClear').style.display = searchQuery ? 'block' : 'none';
+  filterCourses();
+}
+
+function clearSearch() {
+  searchQuery = '';
+  document.getElementById('courseSearch').value = '';
+  document.getElementById('searchClear').style.display = 'none';
+  filterCourses();
+}
+
 function filterCourses() {
   let filtered = COURSES;
   if (activeFilters.campus.length) filtered = filtered.filter(c => activeFilters.campus.includes(c.campus));
   if (activeFilters.age)           filtered = filtered.filter(c => c.ageGroup === activeFilters.age);
   if (activeFilters.track)         filtered = filtered.filter(c => c.track === activeFilters.track);
+  if (activeFilters.level)         filtered = filtered.filter(c => c.level === activeFilters.level);
+  if (activeFilters.length)        filtered = filtered.filter(c => c.programLength === activeFilters.length);
+  if (activeFilters.accom)         filtered = filtered.filter(c => c.accom === activeFilters.accom);
+  if (searchQuery) {
+    filtered = filtered.filter(c =>
+      c.name.toLowerCase().includes(searchQuery) ||
+      c.campus.toLowerCase().includes(searchQuery) ||
+      c.track.toLowerCase().includes(searchQuery) ||
+      c.fieldOfStudy.toLowerCase().includes(searchQuery)
+    );
+  }
   renderCourses(filtered);
 }
 
 function resetFilters() {
   activeFilters.campus = []; activeFilters.age = null; activeFilters.track = null;
+  activeFilters.level = null; activeFilters.length = null; activeFilters.accom = null;
+  searchQuery = '';
+  const si = document.getElementById('courseSearch');
+  if (si) si.value = '';
+  const sc = document.getElementById('searchClear');
+  if (sc) sc.style.display = 'none';
   document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
   renderFilterBar(); renderCourses(COURSES); refreshGroupLabels();
 }
@@ -1104,6 +1223,9 @@ function refreshGroupLabels() {
   document.getElementById('labelCampus').classList.toggle('has-active', activeFilters.campus.length > 0);
   document.getElementById('labelAge').classList.toggle('has-active', activeFilters.age !== null);
   document.getElementById('labelFOS').classList.toggle('has-active', activeFilters.track !== null);
+  document.getElementById('labelLevel').classList.toggle('has-active', activeFilters.level !== null);
+  document.getElementById('labelLength').classList.toggle('has-active', activeFilters.length !== null);
+  document.getElementById('labelAccom').classList.toggle('has-active', activeFilters.accom !== null);
 }
 
 // ─── BOOT ─────────────────────────────────────────────────────────────────────
